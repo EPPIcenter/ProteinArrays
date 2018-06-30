@@ -31,83 +31,26 @@ save(block_to_num_genepix, df_inna_genepix, file = "camgenepix_new.RData")
 
 #==============================================================================#
 #------------------------------------------------------------------------------#
-#                              protein ranking                                 #                             #                        layout for plots per protein                          #
+#                              protein ranking                                 #   
+#                        layout for plots per protein                          #
 #------------------------------------------------------------------------------#
 #==============================================================================#
-
-#------------------------------------------------------------------------------#
-#                                  functions                                   #
-#------------------------------------------------------------------------------#
-
-linpart <- function(means, tol = 2.5) {
-  if (length(means) < 2) return(0:0)
-  if (any(!is.finite(means))) {
-    cutout <- which(!is.finite(means))[1] - 1
-    if (cutout < 2) return(0:0)
-    means <- means[1:cutout]
-  }
-  sl <- diff(means)
-  min.sl <- min(sl)
-  if (min.sl > 0) return(0)
-  ratio <- min.sl/sl
-  ipass <- which(0 < ratio & ratio < tol)
-  return(min(ipass):(max(ipass) + 1))
-}
-
-dfLinDet <- function(dat, nstd = 2, tol = 2.5) {
-  iprot <- grep("PF|MAL", dat$ID)
-  dat <- dat[iprot, c("ID", "Act_Result", "A1", "exposure_setting", "num_stdev_away")]
-  dat <- dat[order(dat$ID),]
-  dat$res <- log(dat$Act_Result)
-  dlist <- split(dat, dat[c("ID", "exposure_setting")])
-  df <- data.frame()
-  for (i in 1:length(dlist)) {
-    ilin <- linpart(dlist[[i]]$res, tol)  # index linear
-    ilin1 <- rep(FALSE, 6)
-    ilin1[ilin] <- TRUE
-    idet <- dlist[[i]]$num_stdev_away >= nstd
-    ikeep <- which(ilin1 & idet)
-    if (length(ikeep) == 0) ikeep = 0
-    dfrow <- data.frame(ID = dlist[[i]]$ID[1],
-                        setting = dlist[[i]]$exposure_setting[1],
-                        start = min(ikeep), end = max(ikeep))
-    df <- rbind(df, dfrow)
-  }
-  return(df)
-}
-
-dfDetLin <- function(dat, nstd = 2, tol = 2.5) {
-  iprot <- grep("PF|MAL", dat$ID)
-  dat <- dat[iprot, c("ID", "Act_Result", "A1", "exposure_setting", "num_stdev_away")]
-  dat <- dat[order(dat$ID),]
-  dat$res <- log(dat$Act_Result)
-  dlist <- split(dat, dat[c("ID", "exposure_setting")])
-  df <- data.frame()
-  for (i in 1:length(dlist)) {
-    idet <- dlist[[i]]$num_stdev_away >= nstd
-    if (any(!idet)) 
-      idet[which(!idet)[1]:length(idet)] <- FALSE  # points to the right of 1st F
-    ilin <- linpart(dlist[[i]][idet, "res"], tol)  # index linear
-    ikeep <- ifelse(ilin == 0, 0, which(idet)[ilin])
-    dfrow <- data.frame(ID = dlist[[i]]$ID[1], 
-                        setting = dlist[[i]]$exposure_setting[1],
-                        start = min(ikeep), end = max(ikeep))
-    df <- rbind(df, dfrow)
-  }
-  return(df)
-}
 
 #load("~/Downloads/gbl_dataframes3.RData")  # df_inna_gbl, linpart_gbldf, 
 #load("~/Downloads/genepix_dataframes3.RData")  # df_inna2, df_inna
 #save(linpart_gbldf, linpart_genepixdf, file = "~/Downloads/cams.RData")
 
+# dilution for NoDNA to compare - 800
+
 #------------------------------------------------------------------------------#
 #                                     Data                                     #
 #------------------------------------------------------------------------------#
 
+setwd("~/Documents/Research/Malaria/")
+source("functionsProt.R")
 library(RColorBrewer)
 cols <- c(brewer.pal(9, "Set1")[-6], brewer.pal(8, "Dark2"))
-#cols <- rainbow(20)  # not as nice but shows that settings are not categorical
+#cols <- rainbow(20)  # not as nice but shows that settings are ordinal
 pardef <- par(no.readonly = TRUE)
 
 bwid <- 0.4
@@ -115,27 +58,51 @@ nset <- 6    # number of settings in a camera
 ndil <- 6    # number of dilutions
 nprot <- 250
 
-load("~/Downloads/cams.RData")  # linpart_gbldf, linpart_genepixdf
-df1gbl     <- dfLinDet(linpart_gbldf,     nstd = 2, tol = 2.5)
-df2gbl     <- dfDetLin(linpart_gbldf,     nstd = 2, tol = 2.5)
-df1genepix <- dfLinDet(linpart_genepixdf, nstd = 2, tol = 2.5)
-df2genepix <- dfDetLin(linpart_genepixdf, nstd = 2, tol = 2.5)
+#load("cams.RData")  # linpart_gbldf, linpart_genepixdf
+fdirgbl  <- "datasets/ArrayCAM/"  
+fdirgpix <- "datasets/Genepix/"
+#gbl  <- dfNsdGBL(fdirgbl)                           # third dilution for NoDNA
+#gbl  <- dfNsdGBL(fdirgbl, match.dil = TRUE)         # dilution matches protein's
+gbl  <- merge(dfNsdGBL(fdirgbl), dfNsdGBL(fdirgbl, match.dil = TRUE), 
+              by = c("block", "ID", "setting", "res"))
+gbl  <- gbl[order(gbl$ID, gbl$setting, gbl$block), ]
+#gpix <- dfNsdGenepix(fdirgpix)                      # matches Median results      
+#gpix <- dfNsdGenepix(fdirgpix, match.dil = TRUE)
+gpix <- merge(dfNsdGenepix(fdirgpix), dfNsdGenepix(fdirgpix, match.dil = TRUE), 
+              by = c("block", "ID", "setting", "res"))
+gpix <- gpix[order(gpix$ID, gpix$setting, gpix$block), ]
+
+#df1gbl  <- dfLinDet( gbl,  nstd = 2, tol = 2.5)
+#df2gbl  <- dfDetLin( gbl,  nstd = 2, tol = 2.5)
+df1gbl  <- dfLinDet2(gbl,  nstd = 2, tol = 2.5)
+df2gbl  <- dfDet2Lin(gbl,  nstd = 2, tol = 2.5)
+#df1gpix <- dfLinDet( gpix, nstd = 2, tol = 2.5)
+#df2gpix <- dfDetLin( gpix, nstd = 2, tol = 2.5)
+df1gpix <- dfLinDet2(gpix, nstd = 2, tol = 2.5)
+df2gpix <- dfDet2Lin(gpix, nstd = 2, tol = 2.5)
 
 dilutions <- c(50, 200, 800, 3200, 12800, 51200)
 settings1 <- sort(unique(df1gbl$setting))
-settings2 <- sort(unique(df1genepix$setting))
+settings2 <- sort(unique(df1gpix$setting))
 
-dat1 <- linpart_gbldf
-dat1 <- dat1[c("ID", "Act_Result", "A1", "exposure_setting", "num_stdev_away")]
-dat1 <- dat1[order(dat1$ID),]
-dat1$res <- log(dat1$Act_Result)
-dlist1 <- split(dat1, dat1$ID)
-
-dat2 <- linpart_genepixdf
-dat2 <- dat2[c("ID", "Act_Result", "A1", "exposure_setting", "num_stdev_away")]
-dat2 <- dat2[order(dat2$ID),]
-dat2$res <- log(dat2$Act_Result)
-dlist2 <- split(dat2, dat2$ID)
+gbl$res <- log(gbl$res)               # res replaced by logs!
+if (ncol(gbl) == 5) {                 # to accommodate both versions in plots
+  gbl$nstd.x <- gbl$nstd
+  gbl$nstd.y <- gbl$nstd
+}
+dlist1 <- split(gbl, gbl$ID)
+gpix$res <- log(gpix$res)
+if (ncol(gbl) == 5) {                 # to accommodate both versions in plots
+  gpix$nstd.x <- gpix$nstd
+  gpix$nstd.y <- gpix$nstd
+}
+dlist2 <- split(gpix, gpix$ID)
+  
+#==============================================================================#
+#------------------------------------------------------------------------------#
+#           Plots: detection on nstd for both versions (1 and 2 col)           #
+#------------------------------------------------------------------------------#
+#==============================================================================#
 
 #------------------------------------------------------------------------------#
 #                       Plots: linpart, then detection                         #
@@ -146,8 +113,8 @@ layout(laymat)
 nstd <- 2
 tol  <- 2.5
 
-plist1 <- split(df1gbl,     df1gbl$ID)
-plist2 <- split(df1genepix, df1genepix$ID)
+plist1 <- split(df1gbl,  df1gbl$ID)
+plist2 <- split(df1gpix, df1gpix$ID)
 sumord <- sapply(plist1, function(df) sum(df$end - df$start))
 maxord <- sapply(plist1, function(df) max(df$end - df$start))  
 ord    <- order(sumord, maxord, decreasing = TRUE)  # max first, then sum
@@ -155,8 +122,8 @@ prots <- names(plist1[ord])
 
 par(ask = TRUE)
 for (prot in prots) {
-  cam1 <- split(dlist1[[prot]], dlist1[[prot]]$exposure_setting)
-  cam2 <- split(dlist2[[prot]], dlist2[[prot]]$exposure_setting)
+  cam1 <- split(dlist1[[prot]], dlist1[[prot]]$setting)
+  cam2 <- split(dlist2[[prot]], dlist2[[prot]]$setting)
   cam1 <- cam1[order(as.numeric(names(cam1)))]
   cam2 <- cam2[order(as.numeric(names(cam2)))]
   for (j in 1:length(settings1)) {
@@ -165,7 +132,7 @@ for (prot in prots) {
          col = "deepskyblue4", xlab = "dilution", ylab = "", lwd = 1.5)
     ilin <- linpart(cam1[[j]][1:6, "res"], tol)  # index linear
     lines((1:6)[ilin], cam1[[j]][ilin, "res"], col = "firebrick3", lwd = 1.5)
-    idet <- cam1[[j]]$num_stdev_away >= nstd
+    idet <- cam1[[j]]$nstd.x >= nstd & cam1[[j]]$nstd.y >- nstd
     if (any(!idet)) idet[which(!idet)[1]:length(idet)] <- FALSE 
     points((1:6)[!idet], cam1[[j]]$res[!idet], pch = 16, lty = 2, col = "white", 
            cex = 1, type = "b")
@@ -178,7 +145,7 @@ for (prot in prots) {
          col = "deepskyblue4", xlab = "dilution", ylab = "", lwd = 1.5)
     ilin <- linpart(cam2[[j]][1:6, "res"], tol)  # index linear
     lines((1:6)[ilin], cam2[[j]][ilin, "res"], col = "firebrick3", lwd = 1.5)
-    idet <- cam2[[j]]$num_stdev_away >= nstd
+    idet <- cam2[[j]]$nstd.x >= nstd & cam2[[j]]$nstd.y >- nstd
     if (any(!idet)) idet[which(!idet)[1]:length(idet)] <- FALSE 
     points((1:6)[!idet], cam2[[j]]$res[!idet], pch = 16, lty = 2, col = "white", 
            cex = 1, type = "b")
@@ -211,7 +178,7 @@ for (prot in prots) {
   }  
 }
 par(pardef)
-  
+
 #------------------------------------------------------------------------------#
 #                       Plots: detection, then linpart                         #
 #------------------------------------------------------------------------------#
@@ -221,8 +188,8 @@ layout(laymat)
 nstd <- 2
 tol  <- 2.5
 
-plist1 <- split(df2gbl,     df2gbl$ID)
-plist2 <- split(df2genepix, df2genepix$ID)
+plist1 <- split(df2gbl,  df2gbl$ID)
+plist2 <- split(df2gpix, df2gpix$ID)
 sumord <- sapply(plist1, function(df) sum(df$end - df$start))
 maxord <- sapply(plist1, function(df) max(df$end - df$start))  
 ord    <- order(sumord, maxord, decreasing = TRUE)  # max first, then sum
@@ -230,15 +197,15 @@ prots <- names(plist1[ord])
 
 par(ask = TRUE)
 for (prot in prots) {
-  cam1 <- split(dlist1[[prot]], dlist1[[prot]]$exposure_setting)
-  cam2 <- split(dlist2[[prot]], dlist2[[prot]]$exposure_setting)
+  cam1 <- split(dlist1[[prot]], dlist1[[prot]]$setting)
+  cam2 <- split(dlist2[[prot]], dlist2[[prot]]$setting)
   cam1 <- cam1[order(as.numeric(names(cam1)))]
   cam2 <- cam2[order(as.numeric(names(cam2)))]
   for (j in 1:length(settings1)) {
     par(mar = c(0.5, 2, 0.5, 0))
     plot(1:6, cam1[[j]]$res, type = "b", pch = 19, xaxt = "n",
          col = "deepskyblue4", xlab = "dilution", ylab = "", lwd = 1.5)
-    idet <- cam1[[j]]$num_stdev_away >= nstd
+    idet <- cam1[[j]]$nstd.x >= nstd & cam1[[j]]$nstd.y >= nstd
     if (any(!idet)) idet[which(!idet)[1]:length(idet)] <- FALSE  
     points((1:6)[!idet], cam1[[j]]$res[!idet], pch = 16, lty = 2, col = "white", 
            cex = 1, type = "b")
@@ -248,12 +215,12 @@ for (prot in prots) {
     legend("topright", bty = "n", 
            legend = c("ArrayCAM", paste("setting", names(cam1[j]))))
   }
-    
+  
   for (j in 1:length(settings2)) {
     par(mar = c(0.5, 2, 0.5, 0))
     plot(1:6, cam2[[j]]$res, type = "b", pch = 19, xaxt = "n",
          col = "deepskyblue4", xlab = "dilution", ylab = "", lwd = 1.5)
-    idet <- cam2[[j]]$num_stdev_away >= nstd
+    idet <- cam2[[j]]$nstd.x >= nstd & cam2[[j]]$nstd.y >= nstd
     if (any(!idet)) idet[which(!idet)[1]:length(idet)] <- FALSE  
     points((1:6)[!idet], cam2[[j]]$res[!idet], pch = 16, lty = 2, col = "white", 
            cex = 1, type = "b")
@@ -290,8 +257,46 @@ for (prot in prots) {
 }
 par(pardef)
 
+# prot <- "PF14_0326e2s4"  # all Genepix below their own NoDNA
+# everything checks out; signal in ArrayCAM, none in Genepix (and not because of variability) 
+a <- read.csv("~/Downloads/Genepix/500.csv", as.is = TRUE)
+a <- a[c("Block", "ID", "F635.Median...B635")]
+names(a) <- c("block", "ID", "res")
+a$block <- (a$block + 1) %/% 2
+nodna <- a[a$ID == "NoDNA", ]
+j <- 1
+nd <- nodna$res[nodna$block == j]
+nd
+a[a$ID == prot & a$block == j, "res"]
+c(mean(nd), sd(nd))
+j <- j + 1
+
+b <- read.csv("~/Downloads/ArrayCAM/200.csv", as.is = TRUE)
+b <- b[c("A1", "ID", "Act_Result")]
+names(b) <- c("block", "ID", "res")
+for (i in 1:6) {
+  b$block[grep(LETTERS[i], b$block)] <- i
+}
+nodna <- b[b$ID == "NoDNA", ]
+j <- 1
+nd <- as.numeric(nodna$res[nodna$block == j])
+nd
+b[b$ID == prot & b$block == j, "res"]
+c(mean(nd, na.rm = TRUE), sd(nd, na.rm = TRUE))
+j <- j + 1
+
+# should be doing two sample t-test (will be easier with 4 replicates)
+#   instead of comparing the mean of Protein to all the NoDNA
+# might throw in random effect of the block as well
+
+#==============================================================================#
 #------------------------------------------------------------------------------#
-#                         Plots: summary by camera                             #
+#                          Plots: summary by camera                            #
+#------------------------------------------------------------------------------#
+#==============================================================================#
+
+#------------------------------------------------------------------------------#
+#                     proportion of proteins per interval                      #
 #------------------------------------------------------------------------------#
 
 par(mfrow = c(1, 2))
@@ -318,8 +323,8 @@ for (k in 1:nset) {
   }
 }
 
-#slist <- split(df1genepix, df1genepix$setting)  # linpart, then detection
-slist <- split(df2genepix, df2genepix$setting)  # detection, then linpart
+#slist <- split(df1gpix, df1gpix$setting)  # linpart, then detection
+slist <- split(df2gpix, df2gpix$setting)  # detection, then linpart
 plot(NULL, xlim = c(1, 6), ylim = c(1 - bwid, nset + bwid), xaxt = "n", 
      yaxt = "n", main = "Genepix camera", 
      xlab = "dilution", ylab = "camera setting")
@@ -342,4 +347,322 @@ for (k in 1:nset) {
   }
 }
 par(pardef)
+
+#------------------------------------------------------------------------------#
+#                      All combinations of linear portions                     #
+#------------------------------------------------------------------------------#
+
+#----------------------- Number of proteins - transparency --------------------#
+
+nset <- length(settings1)               # number of settings
+ndil <- length(dilutions)               # number of dilutions
+lwd <- 7
+
+slist <- split(df1gbl, df1gbl$setting)  # linpart, then detection
+#slist <- split(df2gbl, df2gbl$setting)  # detection, then linpart
+nmax  <- 0
+nintA  <- nintB  <- numeric(nset)
+tlistA <- tlistB <- list(nset)
+for (k in 1:nset) {
+  t2 <- table(slist[[k]]$start, slist[[k]]$end)[-1, -1]
+  if (!is.matrix(t2)) t2 <- matrix(t2, nrow = 1)
+  diag(t2) <- 0
+  nintA[k]    <- sum(t2 > 0)
+  nmax        <- max(nmax, t2)
+  tlistA[[k]] <- t2
+}
+slist <- split(df1gpix, df2gpix$setting)  # linpart, then detection
+#slist <- split(df2gpix, df2gpix$setting)  # detection, then linpart
+for (k in 1:nset) {
+  t2 <- table(slist[[k]]$start, slist[[k]]$end)[-1, -1]
+  if (!is.matrix(t2)) t2 <- matrix(t2, nrow = 1)
+  diag(t2) <- 0
+  nintB[k]    <- sum(t2 > 0)
+  nmax        <- max(nmax, t2)
+  tlistB[[k]] <- t2
+}
+
+par(mfrow = c(1, 2))
+plot(NULL, xlim = c(1, 6), ylim = c(1, nset + 1), xaxt = "n", yaxt = "n", 
+     main = "ArrayCAM", xlab = "dilution", ylab = "camera setting")
+axis(2, at = 1.5:(nset + 0.5), labels = settings1, las = 2, tick = FALSE)
+axis(1, at = 1:ndil, labels = dilutions)
+for (k in 1:nset) {  
+  t2 <- tlistA[[k]]
+  count <- 0
+  for (i in 1:nrow(t2)) {
+    for (j in 1:ncol(t2)) {
+      if (t2[i, j] == 0) next 
+      lines(c(i, j), rep(k + count/nintA[k], 2), lwd = lwd,  
+            col = adjustcolor(cols[k], alpha.f = t2[i,j]/nmax))
+      loc <- count/nintA[k]
+      text(ndil - 1 + loc, k + loc, t2[i, j], col = cols[k], cex = 0.8)
+      count <- count + 1
+    }
+  }
+}
+plot(NULL, xlim = c(1, 6), ylim = c(1, nset + 1), xaxt = "n", yaxt = "n", 
+     main = "Genepix", xlab = "dilution", ylab = "camera setting")
+axis(2, at = 1.5:(nset + 0.5), labels = settings2, las = 2, tick = FALSE)
+axis(1, at = 1:ndil, labels = dilutions)
+for (k in 1:nset) {  
+  t2 <- tlistB[[k]]
+  count <- 0
+  for (i in 1:nrow(t2)) {
+    for (j in 1:ncol(t2)) {
+      if (t2[i, j] == 0) next 
+      lines(c(i, j), rep(k + count/nintB[k], 2), lwd = lwd,  
+            col = adjustcolor(cols[k], alpha.f = t2[i,j]/nmax))
+      loc <- count/nintB[k]
+      text(ndil - 1 + loc, k + loc, t2[i, j], col = cols[k], cex = 0.8)
+      count <- count + 1
+    }
+  }
+}
+par(pardef)
+
+# ---------------------- Number of proteins - line width  ---------------------#  
+
+nprot <- 250
+nset <- length(settings1)               # number of settings
+ndil <- length(dilutions)               # number of dilutions
+lwd <- 10
+
+slist <- split(df1gbl, df1gbl$setting)  # linpart, then detection
+#slist <- split(df2gbl, df2gbl$setting)  # detection, then linpart
+nmax  <- 0
+nintA  <- nintB  <- numeric(nset)
+tlistA <- tlistB <- list(nset)
+for (k in 1:nset) {
+  t2 <- table(slist[[k]]$start, slist[[k]]$end)[-1, -1]
+  if (!is.matrix(t2)) t2 <- matrix(t2, nrow = 1)
+  diag(t2) <- 0
+  nintA[k]    <- sum(t2 > 0)
+  nmax        <- max(nmax, t2)
+  tlistA[[k]] <- t2
+}
+slist <- split(df1gpix, df2gpix$setting)  # linpart, then detection
+#slist <- split(df2gpix, df2gpix$setting)  # detection, then linpart
+for (k in 1:nset) {
+  t2 <- table(slist[[k]]$start, slist[[k]]$end)[-1, -1]
+  if (!is.matrix(t2)) t2 <- matrix(t2, nrow = 1)
+  diag(t2) <- 0
+  nintB[k]    <- sum(t2 > 0)
+  nmax        <- max(nmax, t2)
+  tlistB[[k]] <- t2
+}
+
+par(mfrow = c(1, 2))
+plot(NULL, xlim = c(1, ndil), ylim = c(1, nset + 1), xaxt = "n", yaxt = "n", 
+     main = "ArrayCAM", xlab = "dilution", ylab = "camera setting")
+axis(2, at = 1.4:(nset + 0.4), labels = settings1, las = 2, tick = FALSE)
+axis(1, at = 1:ndil, labels = dilutions)
+for (k in 1:nset) {  
+  t2 <- tlistA[[k]]
+  count <- 0
+  for (i in 1:nrow(t2)) {
+    for (j in 1:ncol(t2)) {
+      if (t2[i, j] == 0) next 
+      lines(c(i, j), rep(k + count/nintA[k], 2), lwd = lwd*t2[i, j]/nmax, 
+            col = adjustcolor(cols[k], alpha.f = 1)) 
+      loc <- count/nintA[k]
+      text(ndil - 1 + loc, k + loc, t2[i, j], col = cols[k], cex = 0.8)
+      count <- count + 1
+    }
+  }
+  text(ndil, k + 0.4, nprot - sum(t2), col = "darkgrey")
+}
+plot(NULL, xlim = c(1, ndil), ylim = c(1, nset + 1), xaxt = "n", yaxt = "n", 
+     main = "Genepix", xlab = "dilution", ylab = "camera setting")
+axis(2, at = 1.4:(nset + 0.4), labels = settings2, las = 2, tick = FALSE)
+axis(1, at = 1:ndil, labels = dilutions)
+for (k in 1:nset) {  
+  t2 <- tlistB[[k]]
+  count <- 0
+  for (i in 1:nrow(t2)) {
+    for (j in 1:ncol(t2)) {
+      if (t2[i, j] == 0) next 
+      lines(c(i, j), rep(k + count/nintB[k], 2), lwd = lwd*t2[i, j]/nmax, 
+            col = adjustcolor(cols[k], alpha.f = 1)) 
+      loc <- count/nintB[k]
+      text(ndil - 1 + loc, k + loc, t2[i, j], col = cols[k], cex = 0.8) 
+      count <- count + 1
+    }
+  }
+  text(ndil, k + 0.4, nprot - sum(t2), col = "darkgrey")
+}
+par(pardef)
+
+#------------------------------------------------------------------------------#
+#                         Length of linear portions only                       #
+#------------------------------------------------------------------------------#
+
+#----------------------- Number of proteins - line width ----------------------#
+
+nset <- length(settings1)               # number of settings
+ndil <- length(dilutions)               # number of dilutions
+lwd <- 23
+
+slist <- split(df1gbl, df1gbl$setting)  # linpart, then detection
+#slist <- split(df2gbl, df2gbl$setting)  # detection, then linpart
+nmax  <- 0
+nintA  <- nintB  <- numeric(nset)
+tlistA <- tlistB <- list(nset)
+for (k in 1:nset) {
+  t1 <- table(slist[[k]]$nlin)[-1]
+  nintA[k]    <- length(t1)
+  nmax        <- max(nmax, t1)
+  tlistA[[k]] <- t1
+}
+slist <- split(df1gpix, df2gpix$setting)  # linpart, then detection
+#slist <- split(df2gpix, df2gpix$setting)  # detection, then linpart
+for (k in 1:nset) {
+  t1 <- table(slist[[k]]$nlin)[-1]
+  nintB[k]    <- length(t1)
+  nmax        <- max(nmax, t1)          # nmax - out of both cameras!
+  tlistB[[k]] <- t1
+}
+
+par(mfrow = c(1, 2))
+plot(NULL, xlim = c(1, ndil), ylim = c(1, nset + 1), yaxt = "n", 
+     main = "ArrayCAM", xlab = "number of points", ylab = "camera setting")
+axis(2, at = 1.5:(nset + 0.5), labels = settings1, las = 2, tick = FALSE)
+for (k in 1:nset) {  
+  t1 <- tlistA[[k]]
+  yloc <- k + ((0:(nintA[k] - 1))/nintA[k])
+  segments(x0 = rep(1, nintA[k]), y0 = yloc, x1 = as.integer(names(t1)), 
+           y1 = yloc, lwd = lwd*t1/nmax, col = cols[k], lend = 1)  # butt caps
+  #           col = adjustcolor(cols[k], alpha.f = t1/nmax))  # not vectorized
+  text(ndil, yloc, t1, col = cols[k])
+}
+plot(NULL, xlim = c(1, ndil), ylim = c(1, nset + 1), yaxt = "n", 
+     main = "Genepix", xlab = "number of points", ylab = "camera setting")
+axis(2, at = 1.5:(nset + 0.5), labels = settings2, las = 2, tick = FALSE)
+for (k in 1:nset) {  
+  t1 <- tlistB[[k]]
+  yloc <- k + ((0:(nintB[k] - 1))/nintB[k])
+  segments(x0 = rep(1, nintB[k]), y0 = yloc, x1 = as.integer(names(t1)), 
+           y1 = yloc, lwd = lwd*t1/nmax, col = cols[k], lend = 1)
+  #           col = adjustcolor(cols[k], alpha.f = t1/nmax))  # not vectorized
+  text(ndil, yloc, t1, col = cols[k])
+}
+par(pardef)
+
+#------------------------------------------------------------------------------#
+#                  Check the overall sum of linear segments                    #
+#------------------------------------------------------------------------------#
+
+# across all settings
+c(sum(df1gbl$nlin - 1), sum(df1gpix$nlin - 1))
+c(sum(df2gbl$nlin - 1), sum(df2gpix$nlin - 1))
+
+# for each setting separately
+cbind(GBL  = tapply(df1gbl$nlin  - 1, df1gbl$setting,  sum), 
+      Gpix = tapply(df1gpix$nlin - 1, df1gpix$setting, sum))
+cbind(GBL  = tapply(df2gbl$nlin  - 1, df2gbl$setting,  sum), 
+      Gpix = tapply(df2gpix$nlin - 1, df2gpix$setting, sum))
+
+#==============================================================================#
+#------------------------------------------------------------------------------#
+#                   NoDNA distribution and signal detection                    #   
+#------------------------------------------------------------------------------#
+#==============================================================================#
+
+ndblock <- "C"  # dilution 800
+
+fdir <- "~/Downloads/ArrayCAM/"  
+flist <- list.files(fdir)
+par(mfrow = c(2, 2), ask = TRUE)
+for (i in 1:length(flist)) {
+  dat <- read.csv(paste(fdir, flist[i], sep = ""), as.is = TRUE)
+  dat$res <- suppressWarnings(as.numeric(dat$Act_Result))
+  # Act_Result is a factor because of those empty lines in excel!!
+  nodna <- dat[tolower(dat$ID) == "nodna" & grepl(ndblock, dat$A1), c("A1", "res")]
+  mnd <- mean(nodna$res)
+  snd <- sd(nodna$res)
+  nodna$pair <- as.integer(substr(nodna$A1, 2, 2))
+  plot(nodna$res, rep(1, nrow(nodna)), pch = 16, col = (3:4)[nodna$pair])
+  hist(nodna$res)
+  hist(nodna$res[nodna$pair == 1], col = adjustcolor(3, alpha.f = 0.2)) 
+  hist(nodna$res[nodna$pair == 2], col = adjustcolor(4, alpha.f = 0.2)) 
+}  
+par(pardef)
+
+# start with these proteins:
+strange <- c("MAL8P1.4.2o2", "PF10_0143e1s2", "PFB0305c-e1", "PF14_0114.1o1",
+             "PF14_0316e1s1", "PFE0055ce3s1", "PFC0440ce1s3", "PF14_0465.1o1", 
+             "PF10_0124-e1s2", "PFB0915we2s2", "PF14_0649-e2s1")
+i <- 1                                   # block C is the one from which nodna is taken
+df <- gbl[gbl$ID == strange[i], ]
+split(df, df$setting)
+i <- i + 1
+
+#==============================================================================#  
+#------------------------------------------------------------------------------#
+#                                     R^2                                      #   
+#------------------------------------------------------------------------------#
+#==============================================================================#
+
+S <- 1e3; N <- 20
+r2 <- matrix(nrow = S, ncol = N)
+for (n in 1:N) {
+  for (s in 1:S) {
+    x <- 1:n
+    y <- x + rnorm(n, sd = 0.5)
+    fit <- lm(y ~ x)
+    r2[s, n] <- summary(fit)$r.squared
+  }
+}
+apply(r2, 2, mean)  # from n = 3 goes up
+apply(r2, 2, var)   # from n = 3 goes down
+
+#------------------------------------ plots -----------------------------------#
+
+#lgbl  <- split(df1gbl,  df1gbl$setting)  # linear part, then detected
+lgbl  <- split(df2gbl,  df2gbl$setting)  # detected, then linear part
+#lgpix <- split(df1gpix, df1gpix$setting)
+lgpix <- split(df2gpix, df2gpix$setting)
+
+r2gbl <- lapply(lgbl, function(df) {
+  df <- df[df$nlin > 2, ]
+  tapply(df$r2, df$nlin, mean)
+})
+r2gpix <- lapply(lgpix, function(df) {
+  df <- df[df$nlin > 2, ]
+  tapply(df$r2, df$nlin, mean)
+})
+
+#ylim <- range(unlist(r2gbl, r2gpix))
+ylim <- c(0.94, 1)
+plot(NULL, xlim = c(1, 6), ylim = ylim, xlab = "settings",
+     ylab = expression(R^2), main = "Fit of linear part")
+for (i in 1:length(r2gbl)) {
+  x1 <- r2gbl[[i]]
+  x2 <- r2gpix[[i]]
+  points(rep(i, length(x2)), x2, pch = (21:25)[as.integer(names(x2)) - 2],
+         bg = "orchid", cex = 2)
+  points(rep(i, length(x1)), x1, pch = (21:25)[as.integer(names(x1)) - 2],
+         bg = "deepskyblue", cex = 2)
+}
+legend("bottomleft", pch = 21:24, legend = paste(3:6, "points in linear part"),
+       bty = "n")
+legend("bottomright", fill = c("deepskyblue", "orchid"), 
+       legend = c("ArrayCAM", "Genepix"), bty = "n")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
